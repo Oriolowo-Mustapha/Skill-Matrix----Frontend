@@ -115,7 +115,8 @@ export default function TeamManagement() {
   )
 
   const handleInputChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    setForm(prev => ({ ...prev, [name]: value }))
   }
 
   const handleRegisterSubmit = async (e) => {
@@ -127,12 +128,11 @@ export default function TeamManagement() {
         firstName: form.firstName,
         lastName: form.lastName,
         email: form.email,
-        userName: form.userName,
-        passwordHash: form.password
+        userName: form.userName
       }, { showSuccessToast: true })
       
       setIsModalOpen(false)
-      setForm({ firstName: '', lastName: '', email: '', userName: '', password: '' })
+      setForm({ firstName: '', lastName: '', email: '', userName: '' })
       fetchMembersAndPaths()
     } catch (err) {
       if (err.isValidationError) {
@@ -250,12 +250,6 @@ export default function TeamManagement() {
                   <label>Username</label>
                   <input type="text" name="userName" className="form-input" value={form.userName} onChange={handleInputChange} required />
                   {validationErrors.UserName && <span className="error-text">{validationErrors.UserName[0]}</span>}
-                </div>
-                
-                <div className="form-group">
-                  <label>Temporary Password</label>
-                  <input type="password" name="password" className="form-input" value={form.password} onChange={handleInputChange} required minLength={6} />
-                  {validationErrors.PasswordHash && <span className="error-text">{validationErrors.PasswordHash[0]}</span>}
                 </div>
                 
                 <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={saving}>

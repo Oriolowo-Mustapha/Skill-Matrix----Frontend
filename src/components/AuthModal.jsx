@@ -1,10 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import useAuthStore from '../store/authStore'
 import apiClient from '../api/axios'
-import { toast } from 'react-hot-toast'
 
 export default function AuthModal({ isOpen, onClose, initialMode = 'login', onLoginSuccess }) {
   const [authMode, setAuthMode] = useState(initialMode);
+  const [prevInitialMode, setPrevInitialMode] = useState(initialMode);
+
+  if (initialMode !== prevInitialMode) {
+    setPrevInitialMode(initialMode);
+    setAuthMode(initialMode);
+  }
   
   // Learner registration fields
   const [learnerForm, setLearnerForm] = useState({
@@ -42,10 +47,6 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login', onLo
   const [validationErrors, setValidationErrors] = useState({});
   const [rememberMe, setRememberMe] = useState(true);
   const setAuth = useAuthStore(state => state.setAuth);
-
-  useEffect(() => {
-    setAuthMode(initialMode);
-  }, [initialMode]);
 
   if (!isOpen) return null;
 

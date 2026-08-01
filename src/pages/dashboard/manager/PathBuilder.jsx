@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import apiClient from '../../../api/axios'
 import { toast } from 'react-hot-toast'
 
@@ -14,14 +14,14 @@ export default function PathBuilder() {
   const [isTrackModalOpen, setIsTrackModalOpen] = useState(false)
   const [isSkillModalOpen, setIsSkillModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [generatingAiCatalog, setGeneratingAiCatalog] = useState(false)
 
   // Forms
   const [pathForm, setPathForm] = useState({ title: '', description: '', image: null })
-  const [trackForm, setTrackForm] = useState({ title: '', description: '', expectedTimeLine: '', image: null })
+  const [trackForm, setTrackForm] = useState({ title: '', description: '', image: null })
   const [skillForm, setSkillForm] = useState({ trackId: '', skillId: '', requiredLevel: 0 })
 
-  const fetchInitialData = async () => {
-    setLoading(true)
+  const fetchInitialData = useCallback(async () => {
     try {
       const [pathsRes, skillsRes] = await Promise.all([
         apiClient.get('/api/CareerPaths'),
@@ -29,22 +29,38 @@ export default function PathBuilder() {
       ])
       setCareerPaths(pathsRes || [])
       setAllSkills(skillsRes || [])
-    } catch (err) {
+    } catch {
       setError('Failed to load career paths.')
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    fetchInitialData()
+    let isMounted = true
+    async function loadData() {
+      try {
+        const [pathsRes, skillsRes] = await Promise.all([
+          apiClient.get('/api/CareerPaths'),
+          apiClient.get('/api/Skills')
+        ])
+        if (isMounted) {
+          setCareerPaths(pathsRes || [])
+          setAllSkills(skillsRes || [])
+        }
+      } catch {
+        if (isMounted) setError('Failed to load career paths.')
+      } finally {
+        if (isMounted) setLoading(false)
+      }
+    }
+    loadData()
+    return () => { isMounted = false }
   }, [])
 
   const handleSelectPath = async (id) => {
     try {
       const res = await apiClient.get(`/api/CareerPaths/${id}`)
       setSelectedPath(res)
-    } catch (err) {
+    } catch {
       toast.error('Failed to load path details')
     }
   }
@@ -67,7 +83,7 @@ export default function PathBuilder() {
       setIsPathModalOpen(false)
       setPathForm({ title: '', description: '', image: null })
       fetchInitialData()
-    } catch (err) {
+    } catch {
       toast.error('Failed to create career path')
     } finally {
       setSaving(false)
@@ -82,9 +98,8 @@ export default function PathBuilder() {
     try {
       const formData = new FormData()
       formData.append('CareerPathId', selectedPath.id)
-      formData.append('Title', trackForm.title)
+      formData.append('Name', trackForm.title)
       formData.append('Description', trackForm.description)
-      formData.append('ExpectedTimeLine', trackForm.expectedTimeLine)
       if (trackForm.image) formData.append('Image', trackForm.image)
 
       await apiClient.post(`/api/CareerPaths/${selectedPath.id}/tracks`, formData, {
@@ -93,9 +108,9 @@ export default function PathBuilder() {
       })
       
       setIsTrackModalOpen(false)
-      setTrackForm({ title: '', description: '', expectedTimeLine: '', image: null })
+      setTrackForm({ title: '', description: '', image: null })
       handleSelectPath(selectedPath.id) // refresh path details
-    } catch (err) {
+    } catch {
       toast.error('Failed to create track')
     } finally {
       setSaving(false)
@@ -118,7 +133,7 @@ export default function PathBuilder() {
       setIsSkillModalOpen(false)
       setSkillForm({ trackId: '', skillId: '', requiredLevel: 0 })
       handleSelectPath(selectedPath.id) // refresh path details
-    } catch (err) {
+    } catch {
       toast.error('Failed to add skill')
     } finally {
       setSaving(false)
@@ -137,7 +152,7 @@ export default function PathBuilder() {
       await apiClient.delete(`/api/CareerPaths/${id}`, { showSuccessToast: true })
       if (selectedPath?.id === id) setSelectedPath(null)
       fetchInitialData()
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete path')
     }
   }
@@ -147,7 +162,7 @@ export default function PathBuilder() {
     try {
       await apiClient.delete(`/api/CareerPaths/${selectedPath.id}/tracks/${trackId}`, { showSuccessToast: true })
       handleSelectPath(selectedPath.id)
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete track')
     }
   }
@@ -157,13 +172,10 @@ export default function PathBuilder() {
     try {
       await apiClient.delete(`/api/CareerPaths/${selectedPath.id}/tracks/${trackId}/skills/${skillId}`, { showSuccessToast: true })
       handleSelectPath(selectedPath.id)
-    } catch (err) {
+    } catch {
       toast.error('Failed to remove skill')
     }
   }
-
-  const proficiencyLevels = ["Novice", "Beginner", "Intermediate", "Proficient", "Expert"]
-  const getProficiencyLabel = (level) => proficiencyLevels[level] || "Unknown"
 
   if (loading) {
     return (
@@ -174,13 +186,34 @@ export default function PathBuilder() {
     )
   }
 
+  const handleGenerateAiCatalog = async () => {
+    setGeneratingAiCatalog(true)
+    try {
+      const res = await apiClient.post('/api/CareerPaths/ai-generate-catalog', {}, { showSuccessToast: true })
+      toast.success(res?.message || 'AI Global Catalog generated successfully!')
+      fetchInitialData()
+    } catch {
+      toast.error('Failed to generate AI catalog.')
+    } finally {
+      setGeneratingAiCatalog(false)
+    }
+  }
+
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '1rem' }}>
-      <div className="dashboard-header-row" style={{ marginBottom: '1rem' }}>
+      <div className="dashboard-header-row" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2 className="dashboard-section-title">Career Path Architect</h2>
           <p className="dashboard-section-subtitle">Design organizational paths, tracks, and map required skills.</p>
         </div>
+        <button 
+          className="btn btn-secondary" 
+          onClick={handleGenerateAiCatalog} 
+          disabled={generatingAiCatalog}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', border: '1px solid var(--matrix-primary)', color: 'var(--matrix-primary)' }}
+        >
+          {generatingAiCatalog ? '⚡ Generating AI Catalog...' : '✨ AI Auto-Generate Catalog'}
+        </button>
       </div>
 
       {error && (
@@ -366,10 +399,6 @@ export default function PathBuilder() {
               <div className="form-group">
                 <label>Description</label>
                 <textarea className="form-input" value={trackForm.description} onChange={e => setTrackForm({...trackForm, description: e.target.value})} required rows={3} placeholder="Describe this specific track..." />
-              </div>
-              <div className="form-group">
-                <label>Expected Timeline</label>
-                <input type="text" className="form-input" value={trackForm.expectedTimeLine} onChange={e => setTrackForm({...trackForm, expectedTimeLine: e.target.value})} required placeholder="e.g. 6-12 Months" />
               </div>
               <div className="form-group">
                 <label>Cover Image (Optional)</label>

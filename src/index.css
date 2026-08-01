@@ -1,33 +1,54 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
-  --matrix-bg: #f8f9fb;
-  --matrix-surface: #ffffff;
-  --matrix-surface-hover: #f1f3f7;
-  --matrix-surface-active: #e8ebf0;
-  
-  --matrix-primary: #0891b2;
-  --matrix-primary-rgb: 8, 145, 178;
-  --matrix-accent: #16a34a;
-  --matrix-accent-rgb: 22, 163, 74;
-  --matrix-neon: #7c3aed;
-  --matrix-neon-rgb: 124, 58, 237;
-  
-  --matrix-border: #e2e5eb;
-  --matrix-border-hover: #cbd1dc;
-  --matrix-border-active: #0891b2;
-  
-  --matrix-text-primary: #0f172a;
-  --matrix-text-secondary: #475569;
-  --matrix-text-muted: #94a3b8;
-  
+  /* Brand Palette (User Specified) */
+  --palette-ocean-blue: #124E78;
+  --palette-soft-cream: #F0F0C9;
+  --palette-gold-yellow: #F2BB05;
+  --palette-burnt-orange: #D74E09;
+  --palette-deep-crimson: #6E0E0A;
+
+  /* Matrix Theme System Tokens */
+  --matrix-bg: #e5e5b6;
+  --matrix-bg-alt: #dadab0;
+  --matrix-surface: #F0F0C9;
+  --matrix-surface-hover: #e3e3b3;
+  --matrix-surface-active: #d6d69e;
+
+  --matrix-primary: #124E78;
+  --matrix-primary-rgb: 18, 78, 120;
+  --matrix-primary-hover: #0a3350;
+
+  --matrix-accent: #D74E09;
+  --matrix-accent-rgb: 215, 78, 9;
+
+  --matrix-yellow: #F2BB05;
+  --matrix-yellow-rgb: 242, 187, 5;
+
+  --matrix-orange: #D74E09;
+  --matrix-orange-rgb: 215, 78, 9;
+
+  --matrix-crimson: #6E0E0A;
+  --matrix-crimson-rgb: 110, 14, 10;
+
+  --matrix-neon: #124E78;
+  --matrix-neon-rgb: 18, 78, 120;
+
+  --matrix-border: #d2d2a4;
+  --matrix-border-hover: #124E78;
+  --matrix-border-active: #D74E09;
+
+  --matrix-text-primary: #124E78;
+  --matrix-text-secondary: #27363f;
+  --matrix-text-muted: #576770;
+
   --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: 'Space Grotesk', monospace;
-  
-  --shadow-flat: 4px 4px 0px 0px #cbd1dc;
-  --shadow-flat-hover: 6px 6px 0px 0px #94a3b8;
+
+  --shadow-flat: 4px 4px 0px 0px #bebe93;
+  --shadow-flat-hover: 6px 6px 0px 0px #124E78;
   --shadow-flat-accent: 4px 4px 0px 0px var(--matrix-primary);
-  
+
   font-family: var(--font-sans);
   background-color: var(--matrix-bg);
   color: var(--matrix-text-secondary);
@@ -1501,9 +1522,10 @@ a {
 }
 
 .dashboard-alert-error {
-  background-color: rgba(255, 0, 50, 0.08);
-  border: 1.5px solid rgba(255, 0, 50, 0.3);
-  color: #ff6b6b;
+  background-color: rgba(110, 14, 10, 0.12);
+  border: 1.5px solid #6E0E0A;
+  color: #6E0E0A;
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {

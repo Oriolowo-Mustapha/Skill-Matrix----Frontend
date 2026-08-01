@@ -15,7 +15,9 @@ const getNavItems = (role) => {
     { key: 'overview', path: '/dashboard', label: 'Overview', icon: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z' },
     { key: 'skills', path: '/dashboard/skills', label: 'My Skills', icon: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
     { key: 'careers', path: '/dashboard/careers', label: 'Career Paths', icon: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z' },
+    { key: 'assessments', path: '/dashboard/assessments', label: 'Assessment Arena & History', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
     { key: 'plans', path: '/dashboard/plans', label: 'Improvement Plans', icon: 'M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8' },
+    { key: 'achievements', path: '/dashboard/achievements', label: 'Achievements & Leaderboard', icon: 'M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z' },
   ]
 }
 
@@ -42,14 +44,24 @@ export default function Dashboard() {
       setLoadingData(true)
       setError('')
       try {
-        const isLearner = user?.role === 'Learner'
+        const isManager = ['Manager', 'Admin', 'SuperAdmin'].includes(user?.role)
+        const isTeamMember = user?.role === 'Team_Members' || user?.role === 'TeamMember'
+        const isNonManager = !isManager
+
+        const careerPathEndpoint = isTeamMember 
+          ? `/api/CareerPaths/assigned/team-member/${user.id}` 
+          : `/api/CareerPaths/assigned/learner/${user.id}`
+
+        const badgeEndpoint = isTeamMember 
+          ? `/api/Badges/assigned/team-member/${user.id}` 
+          : `/api/Badges/assigned/learner/${user.id}`
 
         const [skillsRes, assignedSkillsRes, plansRes, careersRes, badgesRes] = await Promise.allSettled([
           apiClient.get('/api/Skills'),
-          isLearner ? apiClient.get('/api/Skills/assigned') : Promise.resolve([]),
-          isLearner ? apiClient.get('/api/ImprovementPlans') : Promise.resolve([]),
-          user?.id && isLearner ? apiClient.get(`/api/CareerPaths/assigned/learner/${user.id}`) : Promise.resolve([]),
-          user?.id && isLearner ? apiClient.get(`/api/Badges/assigned/learner/${user.id}`) : Promise.resolve([]),
+          isNonManager ? apiClient.get('/api/Skills/assigned') : Promise.resolve([]),
+          isNonManager ? apiClient.get('/api/ImprovementPlans') : Promise.resolve([]),
+          user?.id && isNonManager ? apiClient.get(careerPathEndpoint) : Promise.resolve([]),
+          user?.id && isNonManager ? apiClient.get(badgeEndpoint) : Promise.resolve([]),
         ])
 
         if (skillsRes.status === 'fulfilled') {
@@ -77,7 +89,7 @@ export default function Dashboard() {
         if (badgesRes.status === 'fulfilled') {
           setBadges(badgesRes.value || [])
         }
-      } catch (err) {
+      } catch {
         setError('Failed to load dashboard data. Please check your connection.')
       } finally {
         setLoadingData(false)
@@ -85,7 +97,7 @@ export default function Dashboard() {
     }
 
     loadDashboard()
-  }, [user?.id])
+  }, [user?.id, user?.role])
 
   // Self-assign a skill
   const handleSelfAssign = async (skillId) => {
@@ -108,7 +120,7 @@ export default function Dashboard() {
         return skill
       })
       setAllSkills(mergedSkills)
-    } catch (err) {
+    } catch {
       setError('Failed to assign skill.')
     }
   }
@@ -120,7 +132,7 @@ export default function Dashboard() {
       // Refresh plans
       const updated = await apiClient.get('/api/ImprovementPlans')
       setImprovementPlans(updated || [])
-    } catch (err) {
+    } catch {
       setError('Failed to complete task.')
     }
   }
@@ -133,13 +145,13 @@ export default function Dashboard() {
   // Proficiency level badge color
   const proficiencyColor = (level) => {
     const map = {
-      'Novice': '#ff6b6b',
-      'Begineer': '#ffaa33',
-      'Intermediate': '#00e5ff',
-      'Proficient': '#ccff00',
-      'Expert': '#c084fc',
+      'Novice': '#F79824',
+      'Beginner': '#FDCA40',
+      'Intermediate': '#33A1FD',
+      'Proficient': '#2176FF',
+      'Expert': '#10b981',
     }
-    return map[level] || 'var(--matrix-text-muted)'
+    return map[level] || 'var(--matrix-primary)'
   }
 
 

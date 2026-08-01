@@ -27,3 +27,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Environment Variables
+.env
+.env.*
+!.env.example

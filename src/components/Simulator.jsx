@@ -40,7 +40,7 @@ const SIMULATOR_QUESTIONS = [
 ];
 
 export default function Simulator({ onAuthTrigger }) {
-  const [simStep, setSimStep] = useState('idle'); // 'idle' | 'active' | 'loading' | 'results'
+  const [simStep, setSimStep] = useState('idle'); 
   const [currentQIndex, setCurrentQIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [score, setScore] = useState(0);

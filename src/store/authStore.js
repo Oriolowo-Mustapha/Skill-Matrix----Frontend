@@ -58,6 +58,17 @@ const useAuthStore = create((set, get) => ({
     localStorage.removeItem('matrix_remember');
     sessionStorage.removeItem('matrix_token');
     sessionStorage.removeItem('matrix_user');
+
+    try {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('skill_matrix_active_assessment')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {
+      // Ignore storage cleanup error
+    }
+
     set({ user: null, token: null, isAuthenticated: false });
   },
 

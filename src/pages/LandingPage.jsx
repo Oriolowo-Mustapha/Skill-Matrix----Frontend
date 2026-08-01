@@ -24,10 +24,7 @@ export default function LandingPage() {
   const handleLoginSuccess = (token, rememberMe = true, userData = null) => {
     setAuth(userData, token, rememberMe)
     closeAuthGateway()
-    const role = userData?.Role || userData?.role || useAuthStore.getState().user?.Role || useAuthStore.getState().user?.role
-    if (['Learner', 'Manager', 'Admin', 'SuperAdmin'].includes(role)) {
-      navigate('/dashboard')
-    }
+    navigate('/dashboard')
   }
 
   return (
