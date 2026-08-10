@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import apiClient from '../../api/axios'
 import { toast } from 'react-hot-toast'
+import StatOverviewGrid from '../../components/overview/StatOverviewGrid'
+import QuickCheckModal from '../../components/overview/QuickCheckModal'
 
 export default function Overview() {
   const { 
@@ -19,7 +21,6 @@ export default function Overview() {
   const [startingCheck, setStartingCheck] = useState(false)
 
   // Derived Statistics
-  const totalSkills = Array.isArray(allSkills) ? allSkills.length : 0
   const userAssignedSkills = Array.isArray(allSkills) ? allSkills.filter(s => s.isAssigned || s.proficiencyLevel) : []
   const masteredSkills = userAssignedSkills.filter(s => s.isFullyMastered || s.proficiencyLevel === 'Expert').length
   
@@ -40,7 +41,7 @@ export default function Overview() {
       toast.success('Assessment session initialized!')
       setQuickCheckModalOpen(false)
       navigate('/dashboard/assessments', { state: { assessment: res } })
-    } catch (err) {
+    } catch {
       toast.error('Failed to start assessment.')
     } finally {
       setStartingCheck(false)
@@ -84,25 +85,15 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* Top Stat Cards Grid */}
-      <div className="dash-stats-row">
-        <div className="dash-stat-card">
-          <span className="dash-stat-value">{userAssignedSkills.length}</span>
-          <span className="dash-stat-label">Assigned Skills ({masteredSkills} Mastered)</span>
-        </div>
-        <div className="dash-stat-card">
-          <span className="dash-stat-value">{Array.isArray(assignedCareerPaths) ? assignedCareerPaths.length : 0}</span>
-          <span className="dash-stat-label">Active Career Paths</span>
-        </div>
-        <div className="dash-stat-card">
-          <span className="dash-stat-value">{Array.isArray(improvementPlans) ? improvementPlans.length : 0}</span>
-          <span className="dash-stat-label">Active Growth Plans</span>
-        </div>
-        <div className="dash-stat-card">
-          <span className="dash-stat-value dash-stat-accent">{totalPoints} XP</span>
-          <span className="dash-stat-label">{Array.isArray(badges) ? badges.length : 0} Badges Earned</span>
-        </div>
-      </div>
+      {/* Top Stat Cards Grid Component */}
+      <StatOverviewGrid 
+        userAssignedSkillsCount={userAssignedSkills.length}
+        masteredSkillsCount={masteredSkills}
+        assignedCareerPathsCount={Array.isArray(assignedCareerPaths) ? assignedCareerPaths.length : 0}
+        improvementPlansCount={Array.isArray(improvementPlans) ? improvementPlans.length : 0}
+        totalPoints={totalPoints}
+        badgesCount={Array.isArray(badges) ? badges.length : 0}
+      />
 
       {/* Main Grid split */}
       <div className="dash-overview-grid">
@@ -245,33 +236,16 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* Quick Skill Check Modal */}
-      {quickCheckModalOpen && (
-        <div className="modal-overlay" onClick={() => setQuickCheckModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', width: '90%' }}>
-            <button className="modal-close" onClick={() => setQuickCheckModalOpen(false)}>&times;</button>
-            <h3 className="modal-title" style={{ marginBottom: '1rem' }}>Initialize Quick Skill Check</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--matrix-text-muted)', marginBottom: '1.25rem' }}>
-              Select one of your assigned skills to take a quick 3-question evaluation test.
-            </p>
-            <form onSubmit={handleStartQuickCheck} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="form-group">
-                <label>Target Skill</label>
-                <select className="form-input" value={selectedSkillId} onChange={e => setSelectedSkillId(e.target.value)} required>
-                  <option value="">-- Select a Skill --</option>
-                  {allSkills.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.category || 'General'})</option>
-                  ))}
-                </select>
-              </div>
-
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }} disabled={startingCheck}>
-                {startingCheck ? 'Initializing...' : 'Start Assessment'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Quick Skill Check Modal Component */}
+      <QuickCheckModal 
+        isOpen={quickCheckModalOpen}
+        onClose={() => setQuickCheckModalOpen(false)}
+        onSubmit={handleStartQuickCheck}
+        selectedSkillId={selectedSkillId}
+        setSelectedSkillId={setSelectedSkillId}
+        allSkills={allSkills}
+        startingCheck={startingCheck}
+      />
 
     </div>
   )

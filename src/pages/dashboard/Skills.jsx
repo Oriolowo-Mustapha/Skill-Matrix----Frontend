@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import apiClient from '../../api/axios'
 import { toast } from 'react-hot-toast'
+import SkillCategoryFilter from '../../components/skills/SkillCategoryFilter'
+import SelfAssessmentModal from '../../components/skills/SelfAssessmentModal'
 
 export default function Skills() {
   const { 
@@ -89,26 +91,12 @@ export default function Skills() {
         </div>
       </div>
 
-      {/* Categories Filter Pills */}
-      <div className="dash-skills-categories" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
-        {uniqueCategories.map(cat => (
-          <button 
-            key={cat} 
-            className={`btn ${skillCategory === cat ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => setSkillCategory(cat)}
-            style={{
-              padding: '0.35rem 0.85rem',
-              fontSize: '0.8rem',
-              borderRadius: '20px',
-              backgroundColor: skillCategory === cat ? 'rgba(0, 180, 216, 0.2)' : 'var(--matrix-bg-alt)',
-              borderColor: skillCategory === cat ? 'var(--matrix-primary)' : 'var(--matrix-border)',
-              color: skillCategory === cat ? 'var(--matrix-primary)' : 'var(--matrix-text-muted)'
-            }}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+      {/* Categories Filter Pills Component */}
+      <SkillCategoryFilter 
+        categories={uniqueCategories}
+        selectedCategory={skillCategory}
+        onSelectCategory={setSkillCategory}
+      />
 
       {/* Main Split Grid */}
       <div className="dash-skills-split" style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) minmax(320px, 1.2fr)', gap: '1.25rem' }}>
@@ -225,23 +213,14 @@ export default function Skills() {
 
       </div>
 
-      {/* Skill Check Assessment Modal */}
-      {isCheckModalOpen && selectedSkill && (
-        <div className="modal-overlay" onClick={() => setIsCheckModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', width: '90%' }}>
-            <button className="modal-close" onClick={() => setIsCheckModalOpen(false)}>&times;</button>
-            <h3 className="modal-title" style={{ marginBottom: '1rem' }}>Skill Check: {selectedSkill.name}</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--matrix-text-muted)', marginBottom: '1.25rem' }}>
-              Test your current understanding of <strong>{selectedSkill.name}</strong> to update your proficiency matrix level.
-            </p>
-            <form onSubmit={handleStartSkillCheck} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }} disabled={loadingCheck}>
-                {loadingCheck ? 'Starting Session...' : 'Begin Assessment'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Skill Check Assessment Modal Component */}
+      <SelfAssessmentModal 
+        isOpen={isCheckModalOpen && !!selectedSkill}
+        onClose={() => setIsCheckModalOpen(false)}
+        onSubmit={handleStartSkillCheck}
+        selectedSkillName={selectedSkill?.name}
+        loadingCheck={loadingCheck}
+      />
 
     </div>
   )

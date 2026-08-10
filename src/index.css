@@ -1,53 +1,70 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  /* Brand Palette (User Specified) */
-  --palette-ocean-blue: #124E78;
-  --palette-soft-cream: #F0F0C9;
-  --palette-gold-yellow: #F2BB05;
-  --palette-burnt-orange: #D74E09;
-  --palette-deep-crimson: #6E0E0A;
+  /* Mauve Brand Palette (User Specified) */
+  --color-mauve-50: #f8f2fe;
+  --color-mauve-100: #e5d0fb;
+  --color-mauve-200: #cba1f7;
+  --color-mauve-300: #b072f3;
+  --color-mauve-400: #9643ef;
+  --color-mauve-500: #7c14eb;
+  --color-mauve-600: #6310bc;
+  --color-mauve-700: #4a0c8d;
+  --color-mauve-800: #32085e;
+  --color-mauve-900: #19042f;
+  --color-mauve-950: #110321;
 
-  /* Matrix Theme System Tokens */
-  --matrix-bg: #e5e5b6;
-  --matrix-bg-alt: #dadab0;
-  --matrix-surface: #F0F0C9;
-  --matrix-surface-hover: #e3e3b3;
-  --matrix-surface-active: #d6d69e;
+  /* Matrix Theme System Tokens (Light Mode Gamified Default) */
+  --matrix-bg: #f8f4fe;
+  --matrix-bg-alt: #f2e8fd;
+  --matrix-surface: rgba(255, 255, 255, 0.92);
+  --matrix-surface-hover: #ffffff;
+  --matrix-surface-active: #e5d0fb;
 
-  --matrix-primary: #124E78;
-  --matrix-primary-rgb: 18, 78, 120;
-  --matrix-primary-hover: #0a3350;
+  --matrix-primary: #6310bc;
+  --matrix-primary-rgb: 99, 16, 188;
+  --matrix-primary-hover: #4a0c8d;
 
-  --matrix-accent: #D74E09;
-  --matrix-accent-rgb: 215, 78, 9;
+  --matrix-accent: #7c14eb;
+  --matrix-accent-rgb: 124, 20, 235;
 
-  --matrix-yellow: #F2BB05;
-  --matrix-yellow-rgb: 242, 187, 5;
+  /* Gamification Tokens */
+  --matrix-xp: #f59e0b;
+  --matrix-xp-rgb: 245, 158, 11;
 
-  --matrix-orange: #D74E09;
-  --matrix-orange-rgb: 215, 78, 9;
+  --matrix-mastery: #10b981;
+  --matrix-mastery-rgb: 16, 185, 129;
 
-  --matrix-crimson: #6E0E0A;
-  --matrix-crimson-rgb: 110, 14, 10;
+  --matrix-yellow: #f59e0b;
+  --matrix-yellow-rgb: 245, 158, 11;
 
-  --matrix-neon: #124E78;
-  --matrix-neon-rgb: 18, 78, 120;
+  --matrix-orange: #f97316;
+  --matrix-orange-rgb: 249, 115, 22;
 
-  --matrix-border: #d2d2a4;
-  --matrix-border-hover: #124E78;
-  --matrix-border-active: #D74E09;
+  --matrix-crimson: #ef4444;
+  --matrix-crimson-rgb: 239, 68, 68;
 
-  --matrix-text-primary: #124E78;
-  --matrix-text-secondary: #27363f;
-  --matrix-text-muted: #576770;
+  --matrix-neon: #7c14eb;
+  --matrix-neon-rgb: 124, 20, 235;
 
-  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --matrix-border: rgba(176, 114, 243, 0.25);
+  --matrix-border-hover: rgba(124, 20, 235, 0.5);
+  --matrix-border-active: #6310bc;
+
+  --matrix-text-primary: #110321;
+  --matrix-text-secondary: #19042f;
+  --matrix-text-muted: #4a0c8d;
+
+  --font-sans: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: 'Space Grotesk', monospace;
 
-  --shadow-flat: 4px 4px 0px 0px #bebe93;
-  --shadow-flat-hover: 6px 6px 0px 0px #124E78;
-  --shadow-flat-accent: 4px 4px 0px 0px var(--matrix-primary);
+  --shadow-flat: 0 10px 30px -5px rgba(99, 16, 188, 0.08), 0 4px 12px -2px rgba(17, 3, 33, 0.04);
+  --shadow-flat-hover: 0 20px 40px -10px rgba(99, 16, 188, 0.16), 0 8px 16px -4px rgba(124, 20, 235, 0.12);
+  --shadow-flat-accent: 0 10px 25px -4px rgba(124, 20, 235, 0.25);
 
   font-family: var(--font-sans);
   background-color: var(--matrix-bg);
@@ -444,16 +461,21 @@ a {
 
 /* Opaque Tech Containers */
 .solid-card {
-  background-color: var(--matrix-surface);
-  border: 2px solid var(--matrix-border);
-  border-radius: 8px;
-  padding: 2.25rem;
+  background: var(--matrix-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--matrix-border);
+  border-radius: 16px;
+  padding: 2rem;
   box-shadow: var(--shadow-flat);
   position: relative;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
 }
 
 .solid-card:hover {
+  transform: translateY(-3px);
   border-color: var(--matrix-border-hover);
+  box-shadow: var(--shadow-flat-hover);
 }
 
 @media (max-width: 768px) {

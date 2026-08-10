@@ -11,7 +11,7 @@ export default function VerifyEmail() {
   const token = searchParams.get('token')
   const email = searchParams.get('email')
 
-  const [status, setStatus] = useState('verifying') // 'verifying' | 'success' | 'error'
+  const [status, setStatus] = useState('verifying')
   const [errorMessage, setErrorMessage] = useState('')
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function VerifyEmail() {
   }, [token, email])
 
   return (
-    <div 
+    <div
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -54,7 +54,7 @@ export default function VerifyEmail() {
         padding: '2rem'
       }}
     >
-      <div 
+      <div
         className="solid-card fade-in"
         style={{
           maxWidth: '520px',
@@ -70,7 +70,7 @@ export default function VerifyEmail() {
         {/* State A: Loading Verifying */}
         {status === 'verifying' && (
           <div>
-            <div 
+            <div
               style={{
                 width: '64px',
                 height: '64px',
@@ -99,7 +99,7 @@ export default function VerifyEmail() {
         {/* State B: Success */}
         {status === 'success' && (
           <div>
-            <div 
+            <div
               style={{
                 width: '80px',
                 height: '80px',
@@ -122,7 +122,7 @@ export default function VerifyEmail() {
             <p style={{ color: 'var(--matrix-text-muted, #94A3B8)', fontSize: '0.95rem', marginBottom: '2rem', lineHeight: 1.6 }}>
               Your account for <strong>{email}</strong> has been activated. You can now log in to start taking skill assessments and managing your learning growth.
             </p>
-            <button 
+            <button
               className="btn btn-primary"
               style={{ width: '100%', padding: '0.85rem', fontSize: '1rem', fontWeight: 600 }}
               onClick={() => navigate('/')}
@@ -135,7 +135,7 @@ export default function VerifyEmail() {
         {/* State C: Error */}
         {status === 'error' && (
           <div>
-            <div 
+            <div
               style={{
                 width: '80px',
                 height: '80px',
@@ -158,7 +158,7 @@ export default function VerifyEmail() {
             <p style={{ color: 'var(--matrix-text-muted, #94A3B8)', fontSize: '0.9rem', marginBottom: '2rem', lineHeight: 1.6 }}>
               {errorMessage || 'This verification link may have expired (24h limit) or has already been used.'}
             </p>
-            <button 
+            <button
               className="btn btn-secondary"
               style={{ width: '100%', padding: '0.85rem', fontSize: '0.95rem' }}
               onClick={() => navigate('/')}

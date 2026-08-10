@@ -3,6 +3,8 @@ import { useOutletContext, useNavigate } from 'react-router-dom'
 import apiClient from '../../api/axios'
 import useAuthStore from '../../store/authStore'
 import { toast } from 'react-hot-toast'
+import CatalogBrowser from '../../components/career-paths/CatalogBrowser'
+import TrackBaselineModal from '../../components/career-paths/TrackBaselineModal'
 
 export default function CareerPaths() {
   const { assignedCareerPaths, allSkills, proficiencyColor } = useOutletContext()
@@ -151,97 +153,19 @@ export default function CareerPaths() {
   // --- CATALOG BROWSING VIEW ---
   if (isBrowsing) {
     return (
-      <div className="dash-section fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h2 className="dash-section-title">Career Path Catalog</h2>
-            <p className="dashboard-section-subtitle">Discover and enroll in structured organizational roadmaps.</p>
-          </div>
-          {assignedCareerPaths?.length > 0 && (
-            <button className="btn btn-secondary" onClick={() => setIsBrowsing(false)}>
-              ← Back to My Career Paths
-            </button>
-          )}
-        </div>
-
-        {loadingGlobal ? (
-          <div className="dashboard-loading">
-            <div className="spinner"></div>
-            <p>Loading catalog...</p>
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
-            {globalPaths.map(p => {
-              const isAlreadyAssigned = assignedCareerPaths?.some(ap => ap.careerPathId === p.id || ap.id === p.id)
-              return (
-                <div key={p.id} className="solid-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1.25rem' }}>
-                  <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: 600, margin: '0 0 0.5rem 0', color: 'var(--matrix-primary)' }}>{p.title}</h3>
-                    <p style={{ color: 'var(--matrix-text-muted)', fontSize: '0.9rem', margin: 0, lineHeight: 1.5 }}>{p.description}</p>
-                  </div>
-                  {isAlreadyAssigned ? (
-                    <div style={{ color: '#10b981', fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg>
-                      Enrolled in Path
-                    </div>
-                  ) : (
-                    <button className="btn btn-primary" onClick={() => handlePreview(p)}>
-                      Explore & Enroll
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-            {globalPaths.length === 0 && <p style={{ color: 'var(--matrix-text-muted)' }}>No career paths currently available in catalog.</p>}
-          </div>
-        )}
-
-        {/* Path Preview Modal */}
-        {previewPath && (
-          <div className="modal-overlay" onClick={() => { setPreviewPath(null); setPreviewDetails(null) }}>
-            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '750px', width: '90%', maxHeight: '85vh', overflowY: 'auto' }}>
-              <button className="modal-close" onClick={() => { setPreviewPath(null); setPreviewDetails(null) }}>&times;</button>
-              
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: '0 0 0.5rem 0' }}>{previewPath.title}</h2>
-              <p style={{ color: 'var(--matrix-text-muted)', marginBottom: '1.5rem', fontSize: '0.95rem' }}>{previewPath.description}</p>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--matrix-border)', paddingBottom: '1rem' }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0 }}>Roadmap Stages & Tracks</h3>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleAssignPath}
-                  disabled={isAssigning || loadingPreview}
-                >
-                  {isAssigning ? 'Enrolling...' : 'Enroll in Path'}
-                </button>
-              </div>
-
-              {loadingPreview ? (
-                <div className="dashboard-loading"><div className="spinner"></div></div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {previewDetails?.tracks?.map((track, idx) => (
-                    <div key={track.id} style={{ backgroundColor: 'var(--matrix-bg-alt)', padding: '1.25rem', borderRadius: '10px', border: '1px solid var(--matrix-border)' }}>
-                      <h4 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--matrix-primary)', margin: '0 0 0.35rem 0' }}>
-                        Stage {idx + 1}: {track.name}
-                      </h4>
-                      <p style={{ color: 'var(--matrix-text-muted)', fontSize: '0.875rem', margin: '0 0 0.75rem 0' }}>{track.description}</p>
-                      
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                        {track.skills?.map(skill => (
-                          <span key={skill.id} className="badge-pill" style={{ backgroundColor: 'rgba(0,0,0,0.3)', fontSize: '0.75rem', color: '#fff' }}>
-                            {skill.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      <CatalogBrowser 
+        globalPaths={globalPaths}
+        assignedCareerPaths={assignedCareerPaths}
+        loadingGlobal={loadingGlobal}
+        onBackToMyPaths={() => setIsBrowsing(false)}
+        onPreview={handlePreview}
+        previewPath={previewPath}
+        previewDetails={previewDetails}
+        loadingPreview={loadingPreview}
+        onAssignPath={handleAssignPath}
+        isAssigning={isAssigning}
+        onClosePreview={() => { setPreviewPath(null); setPreviewDetails(null) }}
+      />
     )
   }
 
@@ -467,52 +391,16 @@ export default function CareerPaths() {
         </div>
       )}
 
-      {/* Track Baseline Modal */}
-      {isBaselineModalOpen && selectedTrack && (
-        <div className="modal-overlay" onClick={() => setIsBaselineModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', width: '90%' }}>
-            <button className="modal-close" onClick={() => setIsBaselineModalOpen(false)}>&times;</button>
-            
-            <h3 className="modal-title" style={{ marginBottom: '0.75rem' }}>Track Baseline: {selectedTrack.name}</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--matrix-text-muted)', marginBottom: '1.25rem' }}>
-              Select your declared experience level to generate your tailored baseline assessment test.
-            </p>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
-              {[
-                { value: 0, label: 'Novice (No prior experience)' },
-                { value: 1, label: 'Beginner (Basic foundational knowledge)' },
-                { value: 2, label: 'Intermediate (Practical hands-on experience)' },
-                { value: 3, label: 'Proficient (Extensive project application)' },
-                { value: 4, label: 'Expert (Recognized domain authority)' }
-              ].map(lvl => (
-                <label key={lvl.value} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', border: '1px solid var(--matrix-border)', borderRadius: '8px', cursor: 'pointer', backgroundColor: baselineLevel === lvl.value ? 'rgba(0,180,216,0.1)' : 'var(--matrix-bg-alt)', borderColor: baselineLevel === lvl.value ? 'var(--matrix-primary)' : 'var(--matrix-border)' }}>
-                  <input 
-                    type="radio" 
-                    name="baselineProficiency" 
-                    value={lvl.value} 
-                    checked={baselineLevel === lvl.value} 
-                    onChange={() => setBaselineLevel(lvl.value)} 
-                    style={{ accentColor: 'var(--matrix-primary)' }}
-                  />
-                  <span style={{ fontSize: '0.875rem' }}>{lvl.label}</span>
-                </label>
-              ))}
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button className="btn btn-secondary" onClick={() => setIsBaselineModalOpen(false)}>Cancel</button>
-              <button 
-                className="btn btn-primary" 
-                onClick={handleStartBaseline}
-                disabled={startingBaseline}
-              >
-                {startingBaseline ? 'Initializing...' : 'Begin Track Assessment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Track Baseline Modal Component */}
+      <TrackBaselineModal 
+        isOpen={isBaselineModalOpen && !!selectedTrack}
+        onClose={() => setIsBaselineModalOpen(false)}
+        onSubmit={handleStartBaseline}
+        selectedTrackName={selectedTrack?.name}
+        baselineLevel={baselineLevel}
+        setBaselineLevel={setBaselineLevel}
+        startingBaseline={startingBaseline}
+      />
     </div>
   )
 }

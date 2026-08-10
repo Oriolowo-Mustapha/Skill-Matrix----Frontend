@@ -3,6 +3,7 @@ import { useOutletContext } from 'react-router-dom'
 import apiClient from '../../api/axios'
 import useAuthStore from '../../store/authStore'
 import { toast } from 'react-hot-toast'
+import EndorsePeerModal from '../../components/achievements/EndorsePeerModal'
 
 export default function Achievements() {
   const { badges, allSkills } = useOutletContext()
@@ -34,7 +35,7 @@ export default function Achievements() {
         if (allBadgesRes.status === 'fulfilled') setGlobalBadges(allBadgesRes.value || [])
         if (leaderboardRes.status === 'fulfilled') setLeaderboard(leaderboardRes.value || [])
         if (teamRes.status === 'fulfilled') setTeamMembers(teamRes.value || [])
-      } catch (err) {
+      } catch {
         toast.error('Failed to load leaderboard data.')
       } finally {
         setLoading(false)
@@ -57,7 +58,7 @@ export default function Achievements() {
 
       toast.success('Peer endorsement sent!')
       setIsEndorseModalOpen(false)
-    } catch (err) {
+    } catch {
       toast.error('Failed to submit peer endorsement.')
     } finally {
       setEndorsing(false)
@@ -98,7 +99,7 @@ export default function Achievements() {
                     <div style={{ width: '48px', height: '48px', borderRadius: '50%', backgroundColor: 'rgba(0,180,216,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.75rem auto', fontSize: '1.5rem' }}>
                       {b.iconUrl ? <img src={b.iconUrl} alt={b.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} /> : '🎖️'}
                     </div>
-                    <h4 style={{ margin: '0 0 0.2rem 0', fontSize: '0.85rem', color: '#fff' }}>{b.name}</h4>
+                    <h4 style={{ margin: '0 0 0.2rem 0', fontSize: '0.85rem', color: 'var(--matrix-text-primary)' }}>{b.name}</h4>
                     <span style={{ fontSize: '0.75rem', color: 'var(--matrix-text-muted)' }}>{b.category || 'Achievement'}</span>
                   </div>
                 ))}
@@ -112,7 +113,7 @@ export default function Achievements() {
 
           {/* Badge Catalog (Locked vs Unlocked) */}
           <div className="solid-card" style={{ padding: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', color: '#fff' }}>Badge Catalog</h3>
+            <h3 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', color: 'var(--matrix-text-primary)' }}>Badge Catalog</h3>
             {loading ? (
               <div className="dashboard-loading"><div className="spinner"></div></div>
             ) : (
@@ -121,11 +122,11 @@ export default function Achievements() {
                   const isUnlocked = unlockedBadgeIds.has(gb.id)
                   return (
                     <div key={gb.id} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.85rem 1rem', backgroundColor: 'var(--matrix-bg-alt)', borderRadius: '8px', border: `1px solid ${isUnlocked ? 'var(--matrix-primary)' : 'var(--matrix-border)'}`, opacity: isUnlocked ? 1 : 0.6 }}>
-                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: isUnlocked ? 'rgba(0,180,216,0.2)' : 'var(--matrix-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
+                      <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: isUnlocked ? 'rgba(99,16,188,0.15)' : 'var(--matrix-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem' }}>
                         {isUnlocked ? '🔓' : '🔒'}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <h4 style={{ margin: '0 0 0.15rem 0', fontSize: '0.9rem', color: '#fff' }}>{gb.name}</h4>
+                        <h4 style={{ margin: '0 0 0.15rem 0', fontSize: '0.9rem', color: 'var(--matrix-text-primary)' }}>{gb.name}</h4>
                         <span style={{ fontSize: '0.75rem', color: 'var(--matrix-text-muted)' }}>{gb.description || 'Complete requirements to unlock.'}</span>
                       </div>
                     </div>
@@ -160,11 +161,11 @@ export default function Achievements() {
                     leaderboard.map((entry, idx) => {
                       const isCurrentUser = entry.userId === user?.id || entry.userName === user?.userName
                       return (
-                        <tr key={entry.userId || idx} style={{ borderBottom: '1px solid var(--matrix-border)', backgroundColor: isCurrentUser ? 'rgba(0,180,216,0.1)' : 'transparent' }}>
-                          <td style={{ padding: '0.85rem 0.75rem', fontWeight: 700, color: idx === 0 ? '#ffb703' : idx === 1 ? '#e0e1dd' : idx === 2 ? '#cd7f32' : 'var(--matrix-text-muted)' }}>
+                        <tr key={entry.userId || idx} style={{ borderBottom: '1px solid var(--matrix-border)', backgroundColor: isCurrentUser ? 'rgba(99,16,188,0.08)' : 'transparent' }}>
+                          <td style={{ padding: '0.85rem 0.75rem', fontWeight: 700, color: idx === 0 ? '#d97706' : idx === 1 ? '#6b7280' : idx === 2 ? '#b45309' : 'var(--matrix-text-muted)' }}>
                             #{idx + 1}
                           </td>
-                          <td style={{ padding: '0.85rem 0.75rem', fontWeight: 500, color: '#fff' }}>
+                          <td style={{ padding: '0.85rem 0.75rem', fontWeight: 500, color: 'var(--matrix-text-primary)' }}>
                             {entry.fullName || entry.userName} {isCurrentUser && '(You)'}
                           </td>
                           <td style={{ padding: '0.85rem 0.75rem', textAlign: 'right', fontWeight: 700, color: 'var(--matrix-primary)' }}>
@@ -188,45 +189,20 @@ export default function Achievements() {
 
       </div>
 
-      {/* Endorse Peer Modal */}
-      {isEndorseModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsEndorseModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '480px', width: '90%' }}>
-            <button className="modal-close" onClick={() => setIsEndorseModalOpen(false)}>&times;</button>
-            
-            <h3 className="modal-title" style={{ marginBottom: '0.75rem' }}>👏 Endorse a Teammate</h3>
-            <p style={{ fontSize: '0.875rem', color: 'var(--matrix-text-muted)', marginBottom: '1.25rem' }}>
-              Recognize a peer's skill proficiency to boost their gamification rank and profile score.
-            </p>
-            
-            <form onSubmit={handleEndorseSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div className="form-group">
-                <label>Select Teammate</label>
-                <select className="form-input" value={receiverId} onChange={e => setReceiverId(e.target.value)} required>
-                  <option value="">-- Choose a Teammate --</option>
-                  {teamMembers.filter(m => m.id !== user?.id).map(m => (
-                    <option key={m.id} value={m.id}>{m.firstName} {m.lastName} ({m.email})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Endorsed Skill</label>
-                <select className="form-input" value={skillId} onChange={e => setSkillId(e.target.value)} required>
-                  <option value="">-- Choose a Skill --</option>
-                  {(allSkills || []).map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }} disabled={endorsing}>
-                {endorsing ? 'Submitting Endorsement...' : 'Send Endorsement'}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Endorse Peer Modal Component */}
+      <EndorsePeerModal 
+        isOpen={isEndorseModalOpen}
+        onClose={() => setIsEndorseModalOpen(false)}
+        onSubmit={handleEndorseSubmit}
+        receiverId={receiverId}
+        setReceiverId={setReceiverId}
+        skillId={skillId}
+        setSkillId={setSkillId}
+        teamMembers={teamMembers}
+        allSkills={allSkills}
+        currentUserId={user?.id}
+        endorsing={endorsing}
+      />
 
     </div>
   )

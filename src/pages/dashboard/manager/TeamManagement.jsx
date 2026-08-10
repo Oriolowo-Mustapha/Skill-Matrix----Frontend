@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import apiClient from '../../../api/axios'
 import { toast } from 'react-hot-toast'
+import RegisterMemberModal from '../../../components/team/RegisterMemberModal'
+import AssignPathModal from '../../../components/team/AssignPathModal'
+import AssignSkillModal from '../../../components/team/AssignSkillModal'
 
 export default function TeamManagement() {
   const [members, setMembers] = useState([])
@@ -38,7 +41,7 @@ export default function TeamManagement() {
       setMembers(membersRes || [])
       setCareerPaths(pathsRes || [])
       setAllSkills(skillsRes || [])
-    } catch (err) {
+    } catch {
       setError('Failed to load team data.')
     } finally {
       setLoading(false)
@@ -54,7 +57,7 @@ export default function TeamManagement() {
     try {
       await apiClient.delete(`/api/Teams/members/${id}`, { showSuccessToast: true })
       setMembers(members.filter(m => m.id !== id))
-    } catch (err) {
+    } catch {
       toast.error('Failed to delete team member.')
     }
   }
@@ -77,8 +80,8 @@ export default function TeamManagement() {
       }
       await apiClient.post('/api/CareerPaths/assign-team-member', payload, { showSuccessToast: true })
       setIsAssignModalOpen(false)
-      fetchMembersAndPaths() // Refresh to update assigned paths
-    } catch (err) {
+      fetchMembersAndPaths()
+    } catch {
       toast.error('Failed to assign career path.')
     } finally {
       setSaving(false)
@@ -99,7 +102,7 @@ export default function TeamManagement() {
         skillId: assignSkillForm.skillId
       }, { showSuccessToast: true })
       setIsAssignSkillModalOpen(false)
-    } catch (err) {
+    } catch {
       toast.error('Failed to assign skill.')
     } finally {
       setSaving(false)
@@ -204,7 +207,7 @@ export default function TeamManagement() {
                       <td style={{ padding: '1rem', textAlign: 'right', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center' }}>
                         <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.875rem' }} onClick={() => handleAssignSkillClick(member.id)}>Assign Skill</button>
                         <button className="btn btn-secondary" style={{ padding: '0.4rem 0.8rem', fontSize: '0.875rem' }} onClick={() => handleAssignClick(member.id)}>Assign Path</button>
-                        <button style={{ background: 'none', border: 'none', color: '#ff3355', cursor: 'pointer', padding: '0.2rem' }} onClick={() => handleDeleteMember(member.id)}>
+                        <button style={{ background: 'none', border: 'none', color: '#ff3355', cursor: 'pointer', padding: '0.2rem' }} onClick={() => handleDeleteMember(member.id)} title="Delete Member">
                           <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                         </button>
                       </td>
@@ -217,138 +220,37 @@ export default function TeamManagement() {
         </div>
       )}
 
-      {/* Register Member Modal */}
-      {isModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', width: '90%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <button className="modal-close" onClick={() => setIsModalOpen(false)}>&times;</button>
-            <div className="modal-header" style={{ marginBottom: '1.5rem' }}>
-              <h3 className="modal-title">Register New Team Member</h3>
-            </div>
-            <div className="modal-body">
-              <form onSubmit={handleRegisterSubmit} className="auth-form" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label>First Name</label>
-                    <input type="text" name="firstName" className="form-input" value={form.firstName} onChange={handleInputChange} required />
-                    {validationErrors.FirstName && <span className="error-text">{validationErrors.FirstName[0]}</span>}
-                  </div>
-                  <div className="form-group">
-                    <label>Last Name</label>
-                    <input type="text" name="lastName" className="form-input" value={form.lastName} onChange={handleInputChange} required />
-                    {validationErrors.LastName && <span className="error-text">{validationErrors.LastName[0]}</span>}
-                  </div>
-                </div>
-                
-                <div className="form-group">
-                  <label>Email Address</label>
-                  <input type="email" name="email" className="form-input" value={form.email} onChange={handleInputChange} required />
-                  {validationErrors.Email && <span className="error-text">{validationErrors.Email[0]}</span>}
-                </div>
-                
-                <div className="form-group">
-                  <label>Username</label>
-                  <input type="text" name="userName" className="form-input" value={form.userName} onChange={handleInputChange} required />
-                  {validationErrors.UserName && <span className="error-text">{validationErrors.UserName[0]}</span>}
-                </div>
-                
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '1rem' }} disabled={saving}>
-                  {saving ? 'Registering...' : 'Register Member'}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modals */}
+      <RegisterMemberModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleRegisterSubmit}
+        form={form}
+        onInputChange={handleInputChange}
+        validationErrors={validationErrors}
+        saving={saving}
+      />
 
-      {/* Assign Path Modal */}
-      {isAssignModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsAssignModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', width: '90%' }}>
-            <button className="modal-close" onClick={() => setIsAssignModalOpen(false)}>&times;</button>
-            <div className="modal-header" style={{ marginBottom: '1.5rem' }}>
-              <h3 className="modal-title">Assign Career Path</h3>
-            </div>
-            <div className="modal-body">
-              <form onSubmit={handleAssignSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="form-group">
-                  <label>Select Career Path</label>
-                  {availableCareerPaths.length === 0 ? (
-                    <div style={{ padding: '0.75rem', backgroundColor: 'rgba(255,193,7,0.1)', color: '#d97706', borderRadius: '4px', border: '1px solid #fcd34d' }}>
-                      This team member has already been assigned all available career paths.
-                    </div>
-                  ) : (
-                    <select 
-                      className="form-input" 
-                      value={assignForm.careerPathId} 
-                      onChange={e => setAssignForm({...assignForm, careerPathId: e.target.value, trackId: ''})} 
-                      required
-                    >
-                      <option value="">-- Choose a Path --</option>
-                      {availableCareerPaths.map(path => (
-                        <option key={path.id} value={path.id}>{path.title}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+      <AssignPathModal 
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        onSubmit={handleAssignSubmit}
+        assignForm={assignForm}
+        setAssignForm={setAssignForm}
+        availableCareerPaths={availableCareerPaths}
+        selectedPathDetails={selectedPathDetails}
+        saving={saving}
+      />
 
-                {assignForm.careerPathId && selectedPathDetails?.tracks?.length > 0 && (
-                  <div className="form-group">
-                    <label>Select Track (Optional)</label>
-                    <select 
-                      className="form-input" 
-                      value={assignForm.trackId} 
-                      onChange={e => setAssignForm({...assignForm, trackId: e.target.value})}
-                    >
-                      <option value="">-- General Path (No Track) --</option>
-                      {selectedPathDetails.tracks.map(track => (
-                        <option key={track.id} value={track.id}>{track.name || track.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }} disabled={saving || availableCareerPaths.length === 0}>
-                  {saving ? 'Assigning...' : 'Assign Path'}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Assign Skill Modal */}
-      {isAssignSkillModalOpen && (
-        <div className="modal-overlay" onClick={() => setIsAssignSkillModalOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px', width: '90%' }}>
-            <button className="modal-close" onClick={() => setIsAssignSkillModalOpen(false)}>&times;</button>
-            <div className="modal-header" style={{ marginBottom: '1.5rem' }}>
-              <h3 className="modal-title">Assign Individual Skill</h3>
-            </div>
-            <div className="modal-body">
-              <form onSubmit={handleAssignSkillSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="form-group">
-                  <label>Select Skill</label>
-                  <select 
-                    className="form-input" 
-                    value={assignSkillForm.skillId} 
-                    onChange={e => setAssignSkillForm({...assignSkillForm, skillId: e.target.value})} 
-                    required
-                  >
-                    <option value="">-- Choose a Skill --</option>
-                    {allSkills.map(skill => (
-                      <option key={skill.id} value={skill.id}>{skill.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }} disabled={saving}>
-                  {saving ? 'Assigning...' : 'Assign Skill'}
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
+      <AssignSkillModal 
+        isOpen={isAssignSkillModalOpen}
+        onClose={() => setIsAssignSkillModalOpen(false)}
+        onSubmit={handleAssignSkillSubmit}
+        assignSkillForm={assignSkillForm}
+        setAssignSkillForm={setAssignSkillForm}
+        allSkills={allSkills}
+        saving={saving}
+      />
     </div>
   )
 }
