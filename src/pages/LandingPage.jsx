@@ -32,13 +32,6 @@ export default function LandingPage() {
 
   return (
     <>
-      {/* Background Graphic Blurs */}
-      <div className="aurora-container">
-        <div className="aurora-sphere aurora-1"></div>
-        <div className="aurora-sphere aurora-2"></div>
-        <div className="aurora-sphere aurora-3"></div>
-      </div>
-
       {/* Global Navigation Component */}
       <LandingHeader onOpenAuth={openAuthGateway} />
 

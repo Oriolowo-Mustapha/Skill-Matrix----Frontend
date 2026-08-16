@@ -42,7 +42,9 @@ export default function CareerPaths() {
     async function fetchDetails() {
       setLoading(true)
       try {
-        const res = await apiClient.get(`/api/CareerPaths/${selectedAssignedId}`)
+        const assignedInfo = (assignedCareerPaths || []).find(p => p.careerPathId === selectedAssignedId || p.id === selectedAssignedId)
+        const trackQuery = assignedInfo?.careerPathTrackId ? `?trackId=${assignedInfo.careerPathTrackId}` : ''
+        const res = await apiClient.get(`/api/CareerPaths/${selectedAssignedId}${trackQuery}`)
         setPathDetails(res) 
       } catch {
         toast.error('Failed to load career path details.')
@@ -51,7 +53,7 @@ export default function CareerPaths() {
       }
     }
     fetchDetails()
-  }, [selectedAssignedId, isBrowsing])
+  }, [selectedAssignedId, isBrowsing, assignedCareerPaths])
 
   // Fetch Global Catalog when Browsing mode is activated
   useEffect(() => {
@@ -344,8 +346,13 @@ export default function CareerPaths() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '420px', overflowY: 'auto' }}>
                   {selectedTrack.skills?.map(reqSkill => {
                     const userSkill = (allSkills || []).find(s => s.skillId === reqSkill.id || s.id === reqSkill.id)
-                    const isMastered = userSkill?.isFullyMastered || userSkill?.proficiencyLevel === 'Expert'
-                    const currentLevel = userSkill?.proficiencyLevel || 'Unassigned'
+                    const targetLevelStr = reqSkill.proficiencyLevel || 'Proficient'
+                    const currentLevelStr = userSkill?.proficiencyLevel || 'Unassigned'
+                    
+                    const levelRanks = { 'Novice': 0, 'Beginner': 1, 'Intermediate': 2, 'Proficient': 3, 'Expert': 4 }
+                    const targetRank = levelRanks[targetLevelStr] ?? 3
+                    const currentRank = levelRanks[currentLevelStr] ?? -1
+                    const isMastered = userSkill?.isFullyMastered || (currentRank >= targetRank)
                     
                     return (
                       <div key={reqSkill.id} style={{ 
@@ -358,10 +365,15 @@ export default function CareerPaths() {
                         border: `1px solid ${isMastered ? '#10b981' : 'var(--matrix-border)'}`
                       }}>
                         <div>
-                          <h5 style={{ margin: '0 0 0.2rem 0', fontSize: '0.95rem' }}>{reqSkill.name}</h5>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--matrix-text-muted)' }}>
-                            Status: <strong style={{ color: proficiencyColor ? proficiencyColor(currentLevel) : 'var(--matrix-primary)' }}>{currentLevel}</strong>
-                          </span>
+                          <h5 style={{ margin: '0 0 0.3rem 0', fontSize: '0.95rem', color: 'var(--matrix-text-primary)' }}>{reqSkill.name}</h5>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--matrix-primary)', backgroundColor: 'rgba(0,180,216,0.1)', padding: '0.15rem 0.45rem', borderRadius: '4px', fontWeight: 500 }}>
+                              Target: {targetLevelStr}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--matrix-text-muted)' }}>
+                              My Level: <strong style={{ color: currentLevelStr === 'Unassigned' ? 'var(--matrix-text-muted)' : (proficiencyColor ? proficiencyColor(currentLevelStr) : 'var(--matrix-primary)') }}>{currentLevelStr}</strong>
+                            </span>
+                          </div>
                         </div>
                         
                         {isMastered ? (
@@ -375,7 +387,7 @@ export default function CareerPaths() {
                             style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
                             onClick={() => navigate('/dashboard/skills')}
                           >
-                            {currentLevel === 'Unassigned' ? 'Assign Skill' : 'Check Skill'}
+                            {currentLevelStr === 'Unassigned' ? 'Assign Skill' : 'Check Skill'}
                           </button>
                         )}
                       </div>

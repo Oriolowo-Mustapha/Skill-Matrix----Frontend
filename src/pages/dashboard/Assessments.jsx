@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import Editor from '@monaco-editor/react'
 import apiClient from '../../api/axios'
@@ -155,6 +155,16 @@ export default function Assessments() {
   })
   const [assessmentResult, setAssessmentResult] = useState(null)
   const [allDone, setAllDone] = useState(false)
+
+  // Assessment Timer & Clock Calibration State
+  const [timeRemaining, setTimeRemaining] = useState(null)
+  const [expiresAtDate, setExpiresAtDate] = useState(null)
+  const [serverTimeOffset, setServerTimeOffset] = useState(0)
+  const autoSubmittedBatchesRef = useRef(new Set())
+
+  // Granular Auto-Save State ('saved' | 'saving' | 'error')
+  const [saveStatus, setSaveStatus] = useState('saved')
+  const autosaveTimeoutsRef = useRef({})
 
   // Code Playground State
   const [codeLanguage, setCodeLanguage] = useState('javascript')
@@ -336,12 +346,194 @@ export default function Assessments() {
     const handleBeforeUnload = (e) => {
       if (batches.length > 0 && !allDone && !submitting) {
         e.preventDefault()
-        e.returnValue = 'You have an active assessment in progress. Navigating away will submit your answers.'
+        e.returnValue = 'You have an active assessment in progress. Your progress is continuously saved to the cloud.'
       }
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [batches, allDone, submitting])
+
+  // Granular Network Auto-Save Function
+  const syncResponseToServer = async (questionId, dataToSave) => {
+    if (!currentBatchId || !questionId) return
+    setSaveStatus('saving')
+    try {
+      const res = await apiClient.put(`/api/Assessments/batches/${currentBatchId}/responses/${questionId}`, {
+        selectedOptionId: dataToSave.selectedOptionId ? parseInt(dataToSave.selectedOptionId) : null,
+        submittedCode: dataToSave.submittedCode || null,
+        isFlagged: !!dataToSave.isFlagged,
+        currentQuestionIndex
+      })
+
+      if (res?.data?.isExpired) {
+        toast.error('Assessment time limit has expired.')
+        handleSubmitBatch()
+      } else {
+        setSaveStatus('saved')
+      }
+    } catch (err) {
+      console.warn('[Autosave] Failed to sync question response', questionId, err)
+      setSaveStatus('error')
+    }
+  }
+
+  // Debounced Auto-Save Dispatcher
+  const debouncedSave = (questionId, dataToSave, delayMs = 1500) => {
+    if (autosaveTimeoutsRef.current[questionId]) {
+      clearTimeout(autosaveTimeoutsRef.current[questionId])
+    }
+    setSaveStatus('saving')
+    autosaveTimeoutsRef.current[questionId] = setTimeout(() => {
+      syncResponseToServer(questionId, dataToSave)
+      delete autosaveTimeoutsRef.current[questionId]
+    }, delayMs)
+  }
+
+  // Flush all pending debounced saves before submit
+  const flushPendingAutosaves = async () => {
+    const promises = []
+    Object.keys(autosaveTimeoutsRef.current).forEach(qId => {
+      clearTimeout(autosaveTimeoutsRef.current[qId])
+      const qAns = answers[currentBatchId]?.[qId]
+      if (qAns) {
+        promises.push(syncResponseToServer(qId, qAns))
+      }
+    })
+    autosaveTimeoutsRef.current = {}
+    if (promises.length > 0) {
+      await Promise.allSettled(promises)
+    }
+  }
+
+  // Authoritative Server State Hydration on Batch Mount / Session Resume
+  useEffect(() => {
+    if (!currentBatchId || allDone) return
+
+    let isMounted = true
+    async function hydrateAttemptState() {
+      try {
+        const res = await apiClient.get(`/api/Assessments/batches/${currentBatchId}/state`)
+        if (!isMounted || !res) return
+
+        if (res.status === 'Completed') {
+          setAllDone(true)
+          localStorage.removeItem(getAssessmentStorageKey())
+          return
+        }
+
+        // Hydrate authoritative server timer & compute clock skew offset
+        if (res.expiresAt) {
+          const exp = new Date(res.expiresAt)
+          setExpiresAtDate(exp)
+          const serverUtc = new Date(res.serverTimeUtc).getTime()
+          const offset = serverUtc - Date.now()
+          setServerTimeOffset(offset)
+          const remaining = Math.max(0, Math.floor((exp.getTime() - (Date.now() + offset)) / 1000))
+          setTimeRemaining(remaining)
+        }
+
+        // Hydrate saved responses from server into local state
+        if (res.savedResponses && res.savedResponses.length > 0) {
+          setAnswers(prev => {
+            const batchAns = { ...(prev[currentBatchId] || {}) }
+            res.savedResponses.forEach(r => {
+              // LocalStorage write-ahead buffer takes precedence if local modification is newer
+              const localAns = batchAns[r.questionId]
+              if (!localAns || !localAns.updatedAt || new Date(r.updatedAt) >= new Date(localAns.updatedAt)) {
+                batchAns[r.questionId] = {
+                  selectedOptionId: r.selectedOptionId,
+                  submittedCode: r.submittedCode,
+                  isFlagged: r.isFlagged,
+                  updatedAt: r.updatedAt
+                }
+              }
+            })
+            return { ...prev, [currentBatchId]: batchAns }
+          })
+        }
+
+        // Hydrate active question index if available
+        if (typeof res.lastActiveQuestionIndex === 'number' && res.lastActiveQuestionIndex >= 0) {
+          setCurrentQuestionIndex(res.lastActiveQuestionIndex)
+          syncQuestionTemplate(res.lastActiveQuestionIndex)
+        }
+      } catch (err) {
+        console.warn('[Hydration] Could not fetch server attempt state', err)
+      }
+    }
+
+    hydrateAttemptState()
+    return () => { isMounted = false }
+  }, [currentBatchId])
+
+  // Fallback timer initialization if no server expiration is yet established
+  useEffect(() => {
+    if (!currentBatch || allDone || expiresAtDate) return
+
+    const limitMinutes = currentBatch.timeLimitMinutes || 30
+    const totalSeconds = limitMinutes * 60
+
+    let remaining = totalSeconds
+    if (currentBatch.startedAt) {
+      const elapsed = Math.floor((Date.now() - new Date(currentBatch.startedAt).getTime()) / 1000)
+      if (elapsed > 0) {
+        remaining = Math.max(0, totalSeconds - elapsed)
+      }
+    }
+
+    setTimeRemaining(remaining)
+  }, [currentBatchIndex, currentBatch?.assessmentBatchId, currentBatch?.id, allDone, expiresAtDate])
+
+  // Authoritative 1-Second Countdown Interval (Calibrated against server clock)
+  useEffect(() => {
+    if (timeRemaining === null || allDone || submitting) return
+
+    const timerId = setInterval(() => {
+      if (expiresAtDate) {
+        const calibratedNow = Date.now() + serverTimeOffset
+        const rem = Math.max(0, Math.floor((expiresAtDate.getTime() - calibratedNow) / 1000))
+        setTimeRemaining(rem)
+        if (rem <= 0) {
+          clearInterval(timerId)
+        }
+      } else {
+        setTimeRemaining(prev => {
+          if (prev === null) return null
+          if (prev <= 1) {
+            clearInterval(timerId)
+            return 0
+          }
+          return prev - 1
+        })
+      }
+    }, 1000)
+
+    return () => clearInterval(timerId)
+  }, [expiresAtDate, serverTimeOffset, timeRemaining, allDone, submitting])
+
+  // Automatic Submission Trigger when timer reaches 0:00
+  useEffect(() => {
+    if (timeRemaining === 0 && !allDone && !submitting && batches.length > 0 && currentBatchId) {
+      if (autoSubmittedBatchesRef.current.has(currentBatchId)) {
+        return
+      }
+      autoSubmittedBatchesRef.current.add(currentBatchId)
+      toast.error('⏳ Time limit reached! Automatically submitting your assessment answers...', { duration: 6000 })
+      handleSubmitBatch()
+    }
+  }, [timeRemaining, allDone, submitting, currentBatchId, batches.length])
+
+  // Timer format helper (HH:MM:SS or MM:SS)
+  const formatCountdown = (totalSecs) => {
+    if (totalSecs == null || totalSecs < 0) return '00:00'
+    const hrs = Math.floor(totalSecs / 3600)
+    const mins = Math.floor((totalSecs % 3600) / 60)
+    const secs = totalSecs % 60
+    if (hrs > 0) {
+      return `${hrs}:${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`
+    }
+    return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`
+  }
 
   // Fetch Assessment History
   useEffect(() => {
@@ -361,19 +553,61 @@ export default function Assessments() {
     }
   }, [activeTab])
 
-  // Handle MCQ Option Selection
+  // Handle MCQ Option Selection (Instant visual + Debounced server sync)
   const handleSelectOption = (optionId) => {
     if (!currentQuestion) return
+    const updated = {
+      ...answers[currentBatchId]?.[currentQuestion.id],
+      selectedOptionId: optionId,
+      updatedAt: new Date().toISOString()
+    }
     setAnswers(prev => ({
       ...prev,
       [currentBatchId]: {
         ...prev[currentBatchId],
-        [currentQuestion.id]: {
-          ...prev[currentBatchId]?.[currentQuestion.id],
-          selectedOptionId: optionId
-        }
+        [currentQuestion.id]: updated
       }
     }))
+    debouncedSave(currentQuestion.id, updated, 200) // Near instant for MCQ click
+  }
+
+  // Handle Code Editor Changes (Instant visual + Debounced typing auto-save)
+  const handleCodeChange = (newCode) => {
+    setCodeSnippet(newCode)
+    if (!currentQuestion) return
+    const updated = {
+      ...answers[currentBatchId]?.[currentQuestion.id],
+      submittedCode: newCode,
+      updatedAt: new Date().toISOString()
+    }
+    setAnswers(prev => ({
+      ...prev,
+      [currentBatchId]: {
+        ...prev[currentBatchId],
+        [currentQuestion.id]: updated
+      }
+    }))
+    debouncedSave(currentQuestion.id, updated, 1500) // 1.5s debounce for coding
+  }
+
+  // Toggle Question Flag for Review
+  const handleToggleFlag = (qId = currentQuestion?.id) => {
+    if (!qId) return
+    const currentResp = answers[currentBatchId]?.[qId] || {}
+    const newFlagState = !currentResp.isFlagged
+    const updated = {
+      ...currentResp,
+      isFlagged: newFlagState,
+      updatedAt: new Date().toISOString()
+    }
+    setAnswers(prev => ({
+      ...prev,
+      [currentBatchId]: {
+        ...prev[currentBatchId],
+        [qId]: updated
+      }
+    }))
+    debouncedSave(qId, updated, 50)
   }
 
   // Handle Code Execution Playground (Judge0 API via Backend)
@@ -384,13 +618,16 @@ export default function Assessments() {
       const res = await apiClient.post('/api/Assessments/run-code', {
         language: codeLanguage,
         sourceCode: codeSnippet,
-        expectedOutput: currentQuestion?.expectedOutput || ''
+        sampleInput: currentQuestion?.sampleInput || '',
+        expectedOutput: currentQuestion?.expectedOutput || '',
+        functionName: currentQuestion?.functionName || 'Solve',
+        testCases: currentQuestion?.testCases || []
       })
       setExecutionResult(res)
       if (res?.isSuccess) {
-        toast.success('Code executed & test passed!')
+        toast.success(`All ${res.totalCount || 1} test cases passed! 🎉`)
       } else {
-        toast.error('Code execution failed or produced errors.')
+        toast.error(`Code execution: ${res?.passedCount || 0}/${res?.totalCount || 1} test cases passed.`)
       }
       
       // Auto-save submitted code to answers
@@ -417,6 +654,9 @@ export default function Assessments() {
   const handleSubmitBatch = async () => {
     setSubmitting(true)
     try {
+      // Flush any pending debounced autosaves first
+      await flushPendingAutosaves()
+
       const batchAnswers = answers[currentBatchId] || {}
       const currentBatchQuestions = currentBatch?.questions || []
       
@@ -446,8 +686,20 @@ export default function Assessments() {
         setCurrentQuestionIndex(0)
         syncQuestionTemplate(0, nextBatchIdx)
       }
-    } catch {
-      toast.error('Failed to submit assessment answers.')
+    } catch (err) {
+      const errMsg = err?.response?.data?.message || err?.message || ''
+      if (
+        errMsg.toLowerCase().includes('limit exceeded') ||
+        errMsg.toLowerCase().includes('already completed') ||
+        errMsg.toLowerCase().includes('not found')
+      ) {
+        toast.error('This assessment session has expired or ended. Session reset.')
+        localStorage.removeItem(getAssessmentStorageKey())
+        setBatches([])
+        setAllDone(true)
+      } else {
+        toast.error('Failed to submit assessment answers.')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -460,6 +712,9 @@ export default function Assessments() {
       const nextQIdx = currentQuestionIndex + 1
       setCurrentQuestionIndex(nextQIdx)
       syncQuestionTemplate(nextQIdx)
+      if (currentQuestion) {
+        debouncedSave(currentQuestion.id, answers[currentBatchId]?.[currentQuestion.id] || {}, 0)
+      }
     }
   }
 
@@ -468,6 +723,13 @@ export default function Assessments() {
       const prevQIdx = currentQuestionIndex - 1
       setCurrentQuestionIndex(prevQIdx)
       syncQuestionTemplate(prevQIdx)
+    }
+  }
+
+  const handleJumpToQuestion = (targetIdx) => {
+    if (targetIdx >= 0 && targetIdx < (currentBatch?.questions?.length || 0)) {
+      setCurrentQuestionIndex(targetIdx)
+      syncQuestionTemplate(targetIdx)
     }
   }
 
@@ -571,50 +833,141 @@ export default function Assessments() {
             /* State B: Live Assessment Question Stepper & Sandbox */
             <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '1.5rem', alignItems: 'start' }}>
               
-              {/* Left Sidebar: Module Stepper */}
-              <div className="solid-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--matrix-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Modules Stepper
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {batches.map((batch, idx) => {
-                    const bId = batch.assessmentBatchId || batch.id
-                    const isActive = idx === currentBatchIndex
-                    const isCompleted = completedBatches.includes(bId)
-                    
-                    return (
-                      <div key={bId} style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '0.75rem', 
-                        padding: '0.75rem', 
-                        borderRadius: '8px', 
-                        backgroundColor: isActive ? 'rgba(18, 78, 120, 0.2)' : 'var(--matrix-bg-alt)',
-                        border: `1px solid ${isActive ? 'var(--matrix-primary)' : 'var(--matrix-border)'}`,
-                        opacity: (!isActive && !isCompleted) ? 0.6 : 1
-                      }}>
-                        <div style={{ 
-                          width: '24px', 
-                          height: '24px', 
-                          borderRadius: '50%', 
-                          backgroundColor: isCompleted ? '#10b981' : isActive ? 'var(--matrix-primary)' : 'var(--matrix-bg-alt)',
+              {/* Left Sidebar: Module Stepper & Question Palette */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                
+                {/* Module Stepper */}
+                <div className="solid-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.9rem', color: 'var(--matrix-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Modules Stepper
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {batches.map((batch, idx) => {
+                      const bId = batch.assessmentBatchId || batch.id
+                      const isActive = idx === currentBatchIndex
+                      const isCompleted = completedBatches.includes(bId)
+                      
+                      return (
+                        <div key={bId} style={{ 
                           display: 'flex', 
                           alignItems: 'center', 
-                          justifyContent: 'center', 
-                          color: '#fff',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold'
+                          gap: '0.75rem', 
+                          padding: '0.75rem', 
+                          borderRadius: '8px', 
+                          backgroundColor: isActive ? 'rgba(18, 78, 120, 0.2)' : 'var(--matrix-bg-alt)',
+                          border: `1px solid ${isActive ? 'var(--matrix-primary)' : 'var(--matrix-border)'}`,
+                          opacity: (!isActive && !isCompleted) ? 0.6 : 1
                         }}>
-                          {isCompleted ? '✓' : (idx + 1)}
+                          <div style={{ 
+                            width: '24px', 
+                            height: '24px', 
+                            borderRadius: '50%', 
+                            backgroundColor: isCompleted ? '#10b981' : isActive ? 'var(--matrix-primary)' : 'var(--matrix-bg-alt)',
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            color: '#fff',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold'
+                          }}>
+                            {isCompleted ? '✓' : (idx + 1)}
+                          </div>
+                          <div>
+                            <h5 style={{ margin: '0 0 0.15rem 0', fontSize: '0.875rem', color: 'var(--matrix-text-primary)' }}>Module {idx + 1}</h5>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--matrix-text-muted)' }}>{batch.questions?.length || 0} Questions</span>
+                          </div>
                         </div>
-                        <div>
-                          <h5 style={{ margin: '0 0 0.15rem 0', fontSize: '0.875rem', color: 'var(--matrix-text-primary)' }}>Module {idx + 1}</h5>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--matrix-text-muted)' }}>{batch.questions?.length || 0} Questions</span>
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
+
+                {/* Question Quick-Jump Palette */}
+                {currentBatch?.questions && currentBatch.questions.length > 0 && (
+                  <div className="solid-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <h4 style={{ margin: 0, fontSize: '0.85rem', color: 'var(--matrix-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Question Palette
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--matrix-text-muted)' }}>
+                        {Object.values(answers[currentBatchId] || {}).filter(a => a?.selectedOptionId || (a?.submittedCode && a.submittedCode.trim().length > 0)).length}/{currentBatch.questions.length} Answered
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.45rem' }}>
+                      {currentBatch.questions.map((q, qIdx) => {
+                        const qAns = answers[currentBatchId]?.[q.id]
+                        const isAnswered = qAns?.selectedOptionId || (qAns?.submittedCode && qAns.submittedCode.trim().length > 0)
+                        const isFlagged = !!qAns?.isFlagged
+                        const isCurrent = qIdx === currentQuestionIndex
+
+                        return (
+                          <button
+                            key={q.id}
+                            type="button"
+                            onClick={() => handleJumpToQuestion(qIdx)}
+                            style={{
+                              position: 'relative',
+                              padding: '0.5rem 0.25rem',
+                              borderRadius: '6px',
+                              fontSize: '0.85rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              textAlign: 'center',
+                              backgroundColor: isCurrent 
+                                ? 'var(--matrix-primary)' 
+                                : isAnswered 
+                                  ? 'rgba(16, 185, 129, 0.15)' 
+                                  : 'var(--matrix-bg-alt)',
+                              color: isCurrent 
+                                ? '#fff' 
+                                : isAnswered 
+                                  ? '#10b981' 
+                                  : 'var(--matrix-text-primary)',
+                              border: `1.5px solid ${
+                                isCurrent 
+                                  ? 'var(--matrix-primary)' 
+                                  : isFlagged 
+                                    ? '#f59e0b' 
+                                    : isAnswered 
+                                      ? '#10b981' 
+                                      : 'var(--matrix-border)'
+                              }`,
+                              transition: 'all 0.15s ease'
+                            }}
+                            title={`Question ${qIdx + 1}${isAnswered ? ' (Answered)' : ''}${isFlagged ? ' (Flagged)' : ''}`}
+                          >
+                            {qIdx + 1}
+                            {isFlagged && (
+                              <span style={{ 
+                                position: 'absolute', 
+                                top: '-4px', 
+                                right: '-4px', 
+                                fontSize: '0.65rem',
+                                lineHeight: 1 
+                              }}>
+                                🚩
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Legend */}
+                    <div style={{ display: 'flex', gap: '0.75rem', fontSize: '0.72rem', color: 'var(--matrix-text-muted)', paddingTop: '0.5rem', borderTop: '1px solid var(--matrix-border)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981' }} /> Answered
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#f59e0b' }} /> Flagged
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--matrix-primary)' }} /> Current
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Right Main Arena: Question & Code Editor */}
@@ -623,13 +976,108 @@ export default function Assessments() {
                   
                   <div>
                     {/* Question Header & Stepper */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--matrix-border)', paddingBottom: '1rem' }}>
-                      <span className="badge-pill" style={{ backgroundColor: 'var(--matrix-bg-alt)', color: 'var(--matrix-primary)' }}>
-                        Question {currentQuestionIndex + 1} of {currentBatch?.questions?.length}
-                      </span>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--matrix-text-muted)' }}>
-                        Time Limit: {currentBatch?.timeLimitMinutes || 15} mins
-                      </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--matrix-border)', paddingBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <span className="badge-pill" style={{ backgroundColor: 'var(--matrix-bg-alt)', color: 'var(--matrix-primary)', fontWeight: 700 }}>
+                          Question {currentQuestionIndex + 1} of {currentBatch?.questions?.length}
+                        </span>
+
+                        {/* Explicit Cloud Auto-Save Status Badge */}
+                        <div style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                          padding: '0.25rem 0.65rem',
+                          borderRadius: '12px',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          backgroundColor: saveStatus === 'saving' 
+                            ? 'rgba(59, 130, 246, 0.12)' 
+                            : saveStatus === 'error' 
+                              ? 'rgba(239, 68, 68, 0.12)' 
+                              : 'rgba(16, 185, 129, 0.12)',
+                          color: saveStatus === 'saving' 
+                            ? '#3b82f6' 
+                            : saveStatus === 'error' 
+                              ? '#ef4444' 
+                              : '#10b981',
+                          border: `1px solid ${
+                            saveStatus === 'saving' 
+                              ? 'rgba(59, 130, 246, 0.3)' 
+                              : saveStatus === 'error' 
+                                ? 'rgba(239, 68, 68, 0.3)' 
+                                : 'rgba(16, 185, 129, 0.3)'
+                          }`
+                        }}>
+                          {saveStatus === 'saving' && <span style={{ width: '8px', height: '8px', border: '2px solid #3b82f6', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block', animation: 'spin 0.8s linear infinite' }} />}
+                          {saveStatus === 'saved' && <span>✓</span>}
+                          {saveStatus === 'error' && <span>⚠️</span>}
+                          <span>{saveStatus === 'saving' ? 'Saving draft...' : saveStatus === 'error' ? 'Save failed (retrying)' : 'Saved to Cloud'}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        {/* Bookmark / Flag Question Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFlag(currentQuestion?.id)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.35rem',
+                            padding: '0.35rem 0.75rem',
+                            borderRadius: '16px',
+                            fontSize: '0.8rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            backgroundColor: currentAnswer?.isFlagged ? 'rgba(245, 158, 11, 0.15)' : 'var(--matrix-bg-alt)',
+                            color: currentAnswer?.isFlagged ? '#f59e0b' : 'var(--matrix-text-muted)',
+                            border: `1.5px solid ${currentAnswer?.isFlagged ? '#f59e0b' : 'var(--matrix-border)'}`,
+                            transition: 'all 0.2s ease'
+                          }}
+                          title="Bookmark this question to review later"
+                        >
+                          🚩 {currentAnswer?.isFlagged ? 'Flagged for Review' : 'Flag for Review'}
+                        </button>
+
+                        {/* Live Authoritative AI Countdown Timer Pill */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.45rem',
+                          padding: '0.35rem 0.85rem',
+                          borderRadius: '20px',
+                          backgroundColor: timeRemaining != null && timeRemaining < 60 
+                            ? 'rgba(239, 68, 68, 0.2)' 
+                            : timeRemaining != null && timeRemaining < 300 
+                              ? 'rgba(245, 158, 11, 0.2)' 
+                              : 'var(--matrix-bg-alt)',
+                          border: `1.5px solid ${
+                            timeRemaining != null && timeRemaining < 60 
+                              ? '#ef4444' 
+                              : timeRemaining != null && timeRemaining < 300 
+                                ? '#f59e0b' 
+                                : 'var(--matrix-border)'
+                          }`,
+                          color: timeRemaining != null && timeRemaining < 60 
+                            ? '#ef4444' 
+                            : timeRemaining != null && timeRemaining < 300 
+                              ? '#f59e0b' 
+                              : 'var(--matrix-text-primary)',
+                          fontWeight: 700,
+                          fontSize: '0.875rem',
+                          boxShadow: timeRemaining != null && timeRemaining < 60 ? '0 0 10px rgba(239, 68, 68, 0.4)' : 'none',
+                          transition: 'all 0.3s ease'
+                        }}>
+                          <span style={{ fontSize: '1rem' }}>
+                            {timeRemaining != null && timeRemaining < 60 ? '🚨' : timeRemaining != null && timeRemaining < 300 ? '⚠️' : '⏱️'}
+                          </span>
+                          <span>{formatCountdown(timeRemaining)}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--matrix-text-muted)', marginLeft: '0.2rem' }}>
+                            ({currentBatch?.timeLimitMinutes || 30}m AI limit)
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Question Text */}
@@ -660,7 +1108,7 @@ export default function Assessments() {
                             theme="vs-dark"
                             value={codeSnippet}
                             beforeMount={handleEditorWillMount}
-                            onChange={(val) => setCodeSnippet(val || '')}
+                            onChange={(val) => handleCodeChange(val || '')}
                             options={{
                               fontSize: 14,
                               minimap: { enabled: false },
@@ -690,60 +1138,98 @@ export default function Assessments() {
                         {executionResult && (
                           <div style={{ backgroundColor: 'var(--matrix-bg-alt)', padding: '1.25rem', borderRadius: '10px', border: `1.5px solid ${executionResult.isSuccess ? '#10b981' : 'var(--matrix-crimson)'}`, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             
-                            {/* Summary Header */}
+                            {/* Summary Header & Progress */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--matrix-border)', paddingBottom: '0.75rem' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <span style={{ 
-                                  padding: '0.25rem 0.75rem', 
+                                  padding: '0.35rem 0.85rem', 
                                   borderRadius: '20px', 
                                   backgroundColor: executionResult.isSuccess ? 'rgba(16,185,129,0.15)' : 'rgba(215,78,9,0.15)', 
                                   color: executionResult.isSuccess ? '#10b981' : 'var(--matrix-crimson)', 
                                   fontWeight: 700, 
-                                  fontSize: '0.85rem' 
+                                  fontSize: '0.9rem' 
                                 }}>
-                                  {executionResult.isSuccess ? '✓ Test Passed (1/1)' : '✖ Test Failed (0/1)'}
+                                  {executionResult.isSuccess ? '✓ Accepted' : '✖ Wrong Answer'} ({executionResult.passedCount ?? 0}/{executionResult.totalCount ?? 0} Passed)
                                 </span>
                                 <span style={{ fontSize: '0.85rem', color: 'var(--matrix-text-primary)', fontWeight: 600 }}>
-                                  {executionResult.isSuccess ? 'All test inputs matched expected output' : 'Output mismatch or execution alert'}
+                                  {executionResult.isSuccess ? 'All test cases passed evaluation!' : executionResult.errorMessage || 'Some test cases failed.'}
                                 </span>
+                              </div>
+
+                              {/* Progress bar */}
+                              <div style={{ width: '120px', backgroundColor: 'var(--matrix-border)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ 
+                                  width: `${(executionResult.totalCount > 0 ? (executionResult.passedCount / executionResult.totalCount) : 0) * 100}%`, 
+                                  backgroundColor: executionResult.isSuccess ? '#10b981' : 'var(--matrix-crimson)', 
+                                  height: '100%',
+                                  transition: 'width 0.3s ease'
+                                }} />
                               </div>
                             </div>
 
-                            {/* Test Cases Input vs Expected Grid */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                              
-                              {/* Box A: Test Case Input */}
-                              <div style={{ backgroundColor: 'var(--matrix-surface)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--matrix-border)' }}>
-                                <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--matrix-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.35rem' }}>
-                                  Test Input
+                            {/* Detailed Test Cases List */}
+                            {executionResult.testResults && executionResult.testResults.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                                <span style={{ fontSize: '0.8rem', color: 'var(--matrix-text-muted)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.05em' }}>
+                                  Test Case Suite Breakdown:
                                 </span>
-                                <pre style={{ margin: 0, fontSize: '0.85rem', color: 'var(--matrix-text-primary)', fontFamily: 'monospace', whitespace: 'pre-wrap' }}>
-                                  {currentQuestion?.sampleInput || currentQuestion?.stdin || 'Standard Execution'}
-                                </pre>
-                              </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.65rem' }}>
+                                  {executionResult.testResults.map((tc, idx) => (
+                                    <div key={idx} style={{ 
+                                      backgroundColor: 'var(--matrix-surface)', 
+                                      padding: '0.75rem', 
+                                      borderRadius: '8px', 
+                                      border: `1px solid ${tc.passed ? 'rgba(16,185,129,0.3)' : 'rgba(215,78,9,0.3)'}`,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '0.35rem'
+                                    }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--matrix-text-primary)' }}>
+                                          Test Case {idx + 1} {tc.isHidden && <span style={{ color: 'var(--matrix-text-muted)', fontSize: '0.75rem', fontWeight: 400 }}>(Hidden Evaluation)</span>}
+                                        </span>
+                                        <span style={{ 
+                                          fontSize: '0.75rem', 
+                                          fontWeight: 700, 
+                                          color: tc.passed ? '#10b981' : 'var(--matrix-crimson)',
+                                          padding: '0.15rem 0.5rem',
+                                          borderRadius: '12px',
+                                          backgroundColor: tc.passed ? 'rgba(16,185,129,0.1)' : 'rgba(215,78,9,0.1)'
+                                        }}>
+                                          {tc.passed ? '✓ Passed' : '✖ Failed'}
+                                        </span>
+                                      </div>
 
-                              {/* Box B: Expected Output */}
-                              <div style={{ backgroundColor: 'var(--matrix-surface)', padding: '0.85rem', borderRadius: '8px', border: '1px solid var(--matrix-border)' }}>
-                                <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--matrix-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.35rem' }}>
-                                  Expected Output
+                                      {!tc.isHidden ? (
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--matrix-text-muted)', fontFamily: 'monospace' }}>
+                                          <div><strong>Input:</strong> {tc.input ?? 'N/A'}</div>
+                                          <div><strong>Expected:</strong> {tc.expectedOutput ?? 'N/A'}</div>
+                                          <div style={{ color: tc.passed ? '#10b981' : '#ff6b6b' }}><strong>Actual:</strong> {tc.actualOutput || '(none)'}</div>
+                                        </div>
+                                      ) : (
+                                        <div style={{ fontSize: '0.78rem', color: 'var(--matrix-text-muted)', fontFamily: 'monospace' }}>
+                                          <em style={{ color: 'var(--matrix-text-muted)' }}>[Hidden test case parameters]</em>
+                                          <div style={{ color: tc.passed ? '#10b981' : '#ff6b6b' }}><strong>Actual Output:</strong> {tc.actualOutput || '(none)'}</div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Console Terminal Output */}
+                            <div style={{ backgroundColor: '#0d1117', padding: '0.85rem', borderRadius: '8px', border: '1px solid #30363d' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                                <span style={{ fontSize: '0.75rem', color: '#8b949e', textTransform: 'uppercase', fontWeight: 700, fontFamily: 'monospace' }}>
+                                  💻 Console Terminal Output (stdout / stderr)
                                 </span>
-                                <pre style={{ margin: 0, fontSize: '0.85rem', color: '#10b981', fontFamily: 'monospace', whitespace: 'pre-wrap' }}>
-                                  {currentQuestion?.expectedOutput || 'Execution completed with 0 exit code'}
-                                </pre>
                               </div>
-
-                            </div>
-
-                            {/* Box C: Your Actual Console Output */}
-                            <div style={{ backgroundColor: 'var(--matrix-surface)', padding: '0.85rem', borderRadius: '8px', border: `1px solid ${executionResult.isSuccess ? 'rgba(16,185,129,0.4)' : 'rgba(215,78,9,0.4)'}` }}>
-                              <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--matrix-text-muted)', textTransform: 'uppercase', fontWeight: 600, marginBottom: '0.35rem' }}>
-                                Your Program Output (stdout)
-                              </span>
-                              <pre style={{ margin: 0, fontSize: '0.85rem', color: executionResult.isSuccess ? 'var(--matrix-text-primary)' : '#ff6b6b', fontFamily: 'monospace', whitespace: 'pre-wrap' }}>
-                                {executionResult.consoleOutput || '(No stdout)'}
+                              <pre style={{ margin: 0, fontSize: '0.825rem', color: executionResult.isSuccess ? '#58a6ff' : '#f85149', fontFamily: 'Consolas, Monaco, monospace', whiteSpace: 'pre-wrap', maxHeight: '180px', overflowY: 'auto' }}>
+                                {executionResult.consoleOutput || '(No console output generated)'}
                               </pre>
-                              {executionResult.errorMessage && (
-                                <pre style={{ margin: '0.5rem 0 0 0', fontSize: '0.8rem', color: '#ff6b6b', fontFamily: 'monospace', whitespace: 'pre-wrap', borderTop: '1px dashed var(--matrix-border)', paddingTop: '0.5rem' }}>
+                              {executionResult.errorMessage && !executionResult.testResults?.length && (
+                                <pre style={{ margin: '0.5rem 0 0 0', fontSize: '0.8rem', color: '#ff6b6b', fontFamily: 'monospace', whiteSpace: 'pre-wrap', borderTop: '1px dashed #30363d', paddingTop: '0.5rem' }}>
                                   {executionResult.errorMessage}
                                 </pre>
                               )}

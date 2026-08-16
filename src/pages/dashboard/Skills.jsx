@@ -3,7 +3,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom'
 import apiClient from '../../api/axios'
 import { toast } from 'react-hot-toast'
 import SkillCategoryFilter from '../../components/skills/SkillCategoryFilter'
-import SelfAssessmentModal from '../../components/skills/SelfAssessmentModal'
+import ExperienceGateModal from '../../components/skills/ExperienceGateModal'
 
 export default function Skills() {
   const { 
@@ -213,13 +213,11 @@ export default function Skills() {
 
       </div>
 
-      {/* Skill Check Assessment Modal Component */}
-      <SelfAssessmentModal 
+      {/* Experience Gate Pre-Assessment Modal */}
+      <ExperienceGateModal 
         isOpen={isCheckModalOpen && !!selectedSkill}
         onClose={() => setIsCheckModalOpen(false)}
-        onSubmit={handleStartSkillCheck}
-        selectedSkillName={selectedSkill?.name}
-        loadingCheck={loadingCheck}
+        assignedSkill={selectedSkill}
       />
 
     </div>

@@ -52,23 +52,19 @@ export default function Overview() {
     <div className="dash-overview-container fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
       
       {/* Hero Welcome Banner */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(18, 78, 120, 0.12) 0%, rgba(215, 78, 9, 0.08) 100%)',
-        border: '1px solid var(--matrix-border)',
-        borderRadius: '16px',
-        padding: '1.75rem 2rem',
+      <div className="solid-card nm-fade-in" style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: '1rem',
-        boxShadow: '0 4px 20px rgba(18, 78, 120, 0.08)'
+        padding: '1.75rem 2rem'
       }}>
         <div>
-          <h2 style={{ fontSize: '1.6rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: 'var(--matrix-text-primary)' }}>
+          <h2 style={{ fontSize: '1.6rem', fontWeight: 700, margin: '0 0 0.5rem 0', color: 'var(--nm-text-primary)' }}>
             Elevate Your Skill Matrix 🚀
           </h2>
-          <p style={{ margin: 0, color: 'var(--matrix-text-muted)', fontSize: '0.95rem', maxWidth: '600px' }}>
+          <p style={{ margin: 0, color: 'var(--nm-text-muted)', fontSize: '0.95rem', maxWidth: '600px' }}>
             Track your skill masteries, complete target career path milestones, and earn points as you level up.
           </p>
         </div>
